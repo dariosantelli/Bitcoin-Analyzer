@@ -2,14 +2,23 @@ package main
 
 import (
 	"fmt"
+
+	zmq4 "github.com/pebbe/zmq4"
 )
 
 func main() {
-	fmt.Println("Testing")
-	var input_num string
-	fmt.Scanln(&input_num)
+	// context, _ := zmq4.NewContext()
+	socket, _ := zmq4.NewSocket(zmq4.SUB)
+	// defer context.Close()
+	defer socket.Close()
 
-	fmt.Println("Your input was: ", input_num)
+	addr := "tcp://127.0.0.1:3000"
+
+	socket.Connect(addr)
+
+	data, _ := socket.Recv(0)
+
+	fmt.Println(data)
 
 	// need to create command line interface
 	// get access to live BTC transactions
