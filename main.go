@@ -2,6 +2,9 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+
+	"encoding/hex"
 
 	zmq4 "github.com/pebbe/zmq4"
 )
@@ -14,7 +17,7 @@ func main() {
 	defer socket.Close()
 
 	addr := "tcp://127.0.0.1:29000"
-	socket.SetSubscribe("rawtx")
+	socket.SetSubscribe("hashtx")
 	socket.Connect(addr)
 
 	for {
@@ -25,26 +28,24 @@ func main() {
 
 		received, _ := socket.RecvMessage(0)
 
-		fmt.Println("Raw received: ", received)
+		fmt.Println("Hash received: ", received)
 
-		/*
-			var received_bytes [][]byte
-			received_bytes, _ = socket.RecvMessageBytes(0)
-			// hex.Decode(bites, data)
-			// var dst []byte
+		topic := received[0]
+		data := received[1]
+		count := received[2]
 
-			// hex.Decode(dst, received_bytes)
+		fmt.Println("\tTopic: ", topic, " | ", len(topic))
+		fmt.Println("\tData: ", hex.EncodeToString([]byte(data)), " | ", len(data))
+		fmt.Println("\tCount: ", hex.EncodeToString([]byte(count)), " | ", len(count))
 
-			fmt.Println("Decoded bytes: ", received_bytes)
+		format, _ := strconv.ParseInt(count, 16, 8)
+		fmt.Println("Formatted Count: ", format)
 
-			var received_hex string
-			received_hex, _ = socket.Recv(0)
+		fmt.Println("Data byte array: ", []byte(data))
 
-			var temp_bytes []byte
-			temp_bytes, _ = hex.DecodeString(received_hex)
+		fmt.Println("Out: ", hex.EncodeToString([]byte(data)))
+		fmt.Println("Len of out: ", len(hex.EncodeToString([]byte(data))))
 
-			fmt.Println("Received data: ", temp_bytes)
-		*/
 	}
 
 	// need to create command line interface
