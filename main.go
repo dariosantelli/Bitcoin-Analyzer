@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 	"os/exec"
@@ -68,12 +69,24 @@ func main() {
 		fmt.Println("Input was not 1")
 	}
 
-	var input2 int = 0
-	fmt.Println("Please enter another thing")
-	fmt.Scanln(&input2)
+	var cummand string = "/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin-22.0-x86_64-linux-gnu/bitcoin-22.0/bin/bitcoin-cli -conf=/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin.conf getblockchaininfo"
 
-	cmd := exec.Command("gnome-terminal", "-e", "/home/dariosantelli/Documents")
-	cmd.Start()
+	cmd := exec.Command("bash", "-c", cummand)
+
+	// fmt.Println(string(out))
+
+	var stdout bytes.Buffer
+
+	cmd.Stdout = &stdout
+
+	err := cmd.Run()
+
+	fmt.Println(stdout.String())
+
+	if err != nil {
+		fmt.Println("Error: ", err)
+	}
+
 	// need to create command line interface
 	// get access to live BTC transactions
 }
