@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"os/exec"
 
@@ -24,140 +25,123 @@ func listenForHashtx(updates chan string) {
 	defer context.Term()
 	defer socket.Close()
 
+	var num_transactions int = 0
+	var output_enabled bool = false
+
+	go listenForHashtxWorker(socket, &num_transactions, &output_enabled)
 	fmt.Println("In listen for updates")
 	for {
-		select {
-		case input := <-updates:
-			fmt.Println("Input is: ", input)
-			switch input {
-			case "quit":
-				fmt.Println("Got quit case: ", input)
-				return
-			case "help":
-				fmt.Println("Got case help: ", input)
-			default:
-				fmt.Println("Got case default: ", input)
-			}
-			fmt.Println("Outside")
-
+		input := <-updates
+		switch input {
+		case "quit":
+			fmt.Println("Got quit case: ", input)
+			return
+		case "help":
+			fmt.Println("Got case help: ", input)
+		case "trans":
+			updates <- fmt.Sprint(num_transactions)
+		case "reset":
+			num_transactions = 0
+		case "enable":
+			output_enabled = true
+		case "disable":
+			output_enabled = false
 		default:
-			// fmt.Println("Did not get quit signal")
-			// received, _ := socket.RecvMessage(0)
+			fmt.Println("Got case default: ", input)
 
-			// fmt.Println("Received: ", received)
 			// fmt.Println("Default")
+
 		}
+
 	}
 }
 
-// func listenForUpdates(addr string, notification_type string, updates chan int) {
+func listenForHashtxWorker(socket *zmq4.Socket, num_transactions *int, output_enabled *bool) {
 
-// 	var socket, context = setupSocket(addr, notification_type)
-// 	defer context.Term()
-// 	defer socket.Close()
+	for {
+		received, _ := socket.RecvMessage(0)
+		data := received[1]
+		if *output_enabled {
+			fmt.Println("Received: ", hex.EncodeToString([]byte(data)))
+		}
 
-// 	fmt.Println("In listen for updates")
-// 	for {
-// 		select {
-// 		case quitsignal := <-updates:
-// 			if quitsignal == 1 {
-// 				fmt.Println("Quit signal was: ", quitsignal)
-// 			} else {
-// 				fmt.Println("Quit signal was: ", quitsignal)
-// 			}
-// 			return
-// 		default:
-// 			fmt.Println("Did not get quit signal")
-// 			received, _ := socket.RecvMessage(0)
+		*num_transactions += 1
+	}
+}
 
-// 			fmt.Println("Received: ", received)
-// 		}
-// 	}
-// }
-
-func startZmq(quit chan bool, testint *int) {
+func startZmq() (hashtx chan string) {
 	hashtx_updates := make(chan string)
 	go listenForHashtx(hashtx_updates)
 
-	var test string
-	fmt.Println("Please enter something")
-	fmt.Scanln(&test)
+	return hashtx_updates
+}
 
-	hashtx_updates <- test
+func runMainMenu() {
+	fmt.Println("(1) Do first thing")
+	fmt.Println("(2) Do second thing")
+	fmt.Println("(3) Tx Menu")
+	fmt.Println("\nPlease select an entry")
+}
 
-	// var hashtx_socket = setupSocket("tcp://127.0.0.1:29002", "hashtx", context)
+func runTxMenu(hash_updates chan string) {
 
-	// received, _ := hashtx_socket.RecvMessage(0)
+	for {
+		fmt.Println("(1) # of Txs")
+		fmt.Println("(2) Reset Txs")
+		fmt.Println("(3) Enable live output")
+		fmt.Println("(4) Disable live output")
+		fmt.Println("\nPlease select an entry")
+		input, _, _ := keyboard.GetSingleKey()
+		switch input {
+		case 49: //1
+			hash_updates <- "trans"
+			fmt.Println("# of Txs is: ", <-hash_updates)
+		case 50: //2
+			hash_updates <- "reset"
+		case 51: //3
+			hash_updates <- "enable"
+		case 52: //4
+			hash_updates <- "disable"
+		case 57:
+			return
+		default:
+			fmt.Println("Invalid entry")
+		}
+	}
 
-	// fmt.Println("Received: ", received)
-
-	// rawtx_updates := make(chan int)
-	// go listenForUpdates("hashtx", rawtx_updates)
-
-	// var rawtx_socket = setupSocket("tcp://127.0.0.1:29001", "rawtx", context)
-	// defer rawtx_socket.Close()
-
-	// // rawtx_updates <- 4
-
-	// var hashblock_socket = setupSocket("tcp://127.0.0.1:29003", "hashblock", context)
-	// defer hashblock_socket.Close()
-
-	// var rawblock_socket = setupSocket("tcp://127.0.0.1:29000", "rawblock", context)
-	// defer rawblock_socket.Close()
-
-	// for {
-	// 	select {
-	// 	case quitsignal := <-quit:
-	// 		if quitsignal == true {
-	// 			fmt.Println("Quit signal was: ", quitsignal)
-	// 		} else {
-	// 			fmt.Println("Quit signal was: ", quitsignal)
-	// 		}
-	// 		return
-	// 	default:
-	// 		fmt.Println("Did not get quit signal")
-	// 		received, _ := hashtx_socket.RecvMessage(0)
-
-	// 		fmt.Println("Hash received: ", received)
-
-	// 		*testint += 1
-	// 		topic := received[0]
-	// 		data := received[1]
-	// 		count := received[2]
-
-	// 		fmt.Println("\tTopic: ", topic, " | ", len(topic))
-	// 		fmt.Println("\tData: ", hex.EncodeToString([]byte(data)), " | ", len(data))
-	// 		fmt.Println("\tCount: ", hex.EncodeToString([]byte(count)), " | ", len(count))
-
-	// 		format, _ := strconv.ParseInt(count, 16, 8)
-	// 		fmt.Println("Formatted Count: ", format)
-
-	// 		fmt.Println("Data byte array: ", []byte(data))
-
-	// 		fmt.Println("Out: ", hex.EncodeToString([]byte(data)))
-	// 		fmt.Println("Len of out: ", len(hex.EncodeToString([]byte(data))))
-	// 	}
-	// }
 }
 
 func main() {
 
-	var input int = 0
-	fmt.Println("Please enter 1")
-	fmt.Scanln(&input)
+	hash_updates := startZmq()
 
-	quit := make(chan bool)
+	for {
+		runMainMenu()
+		input, _, _ := keyboard.GetSingleKey()
+		fmt.Println("Got keystroke: ", input)
 
-	var testint int = 0
+		//convert key # to key value
 
-	if input == 1 {
-		go startZmq(quit, &testint)
-		keystroke, _, _ := keyboard.GetSingleKey()
-		fmt.Println("Got keystroke: ", keystroke)
-		fmt.Println("Testint: ", testint)
-		quit <- true
-	} else {
-		fmt.Println("Input was not 1")
+		//command line parser to plug in bitcoin.conf path
+
+		switch input {
+		case 49: //1
+			fmt.Println("you selected 1")
+		case 50: //2
+			fmt.Println("two was selected")
+		case 51: //3
+			runTxMenu(hash_updates)
+		case 52: //4
+			hash_updates <- "reset"
+		case 53: //5
+			hash_updates <- "enable"
+		case 54: //6
+			hash_updates <- "disable"
+		case 57:
+			return
+		default:
+			fmt.Println("Invalid entry")
+		}
 	}
 
 	var command string = "/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin-22.0-x86_64-linux-gnu/bitcoin-22.0/bin/bitcoin-cli -conf=/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin.conf getblockchaininfo"
