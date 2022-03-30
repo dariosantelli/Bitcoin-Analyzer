@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 
 	"github.com/eiannone/keyboard"
 	zmq4 "github.com/pebbe/zmq4"
 )
+
+var bitcoin_conf_path string = "/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin-22.0-x86_64-linux-gnu/bitcoin-22.0/bin/bitcoin-cli -conf=/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin.conf"
 
 func setupSocket(addr string, notification_type string) (*zmq4.Socket, *zmq4.Context) {
 	context, _ := zmq4.NewContext()
@@ -19,13 +22,19 @@ func setupSocket(addr string, notification_type string) (*zmq4.Socket, *zmq4.Con
 	return socket, context
 }
 
+func getCurrentMempoolCount() (count int) {
+	mempool_info := runBtcCliCommand("getmempoolinfo")
+
+	return int((mempool_info["size"]).(float64))
+}
+
 func listenForHashtx(updates chan string) {
 
 	var socket, context = setupSocket("tcp://127.0.0.1:29002", "hashtx")
 	defer context.Term()
 	defer socket.Close()
 
-	var num_transactions int = 0
+	var num_transactions int = getCurrentMempoolCount()
 	var output_enabled bool = false
 
 	go listenForHashtxWorker(socket, &num_transactions, &output_enabled)
@@ -127,6 +136,7 @@ func main() {
 		switch input {
 		case 49: //1
 			fmt.Println("you selected 1")
+			fmt.Println("count: ", getCurrentMempoolCount())
 		case 50: //2
 			fmt.Println("two was selected")
 		case 51: //3
@@ -144,24 +154,28 @@ func main() {
 		}
 	}
 
-	var command string = "/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin-22.0-x86_64-linux-gnu/bitcoin-22.0/bin/bitcoin-cli -conf=/run/media/dariosantelli/8f38888c-c537-4bf7-b442-d347e2c10270/bitcoin.conf getblockchaininfo"
-
-	cmd := exec.Command("bash", "-c", command)
-
-	// fmt.Println(string(out))
-
-	var stdout bytes.Buffer
-
-	cmd.Stdout = &stdout
-
-	err := cmd.Run()
-
-	fmt.Println(stdout.String())
-
-	if err != nil {
-		fmt.Println("Error: ", err)
-	}
-
 	// need to create command line interface
 	// get access to live BTC transactions
+}
+
+func runBtcCliCommand(command string) (output map[string]interface{}) {
+
+	var command_to_run = bitcoin_conf_path + " " + command
+
+	cmd := exec.Command("bash", "-c", command_to_run)
+
+	var byte_buffer bytes.Buffer
+	var byte_array []byte
+	var result map[string]interface{}
+
+	cmd.Stdout = &byte_buffer
+
+	_ = cmd.Run()
+
+	byte_array, _ = byte_buffer.ReadBytes(0)
+
+	json.Unmarshal(byte_array, &result)
+
+	return result
+
 }
