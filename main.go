@@ -35,7 +35,7 @@ func getCurrentBlockCount() (count float64) {
 	return 1098
 }
 
-func listenForHashtx(updates chan string) {
+func listenForHashtx(hashtx_updates chan string) {
 
 	var socket, context = setupSocket("tcp://127.0.0.1:29002", "hashtx")
 	defer context.Term()
@@ -47,21 +47,23 @@ func listenForHashtx(updates chan string) {
 	go listenForHashtxWorker(socket, &num_transactions, &output_enabled)
 	fmt.Println("In listen for updates")
 	for {
-		input := <-updates
+		input := <-hashtx_updates
 		switch input {
+		case "mempool_count":
+			hashtx_updates <- fmt.Sprint(num_transactions)
+		case "enable_live_output":
+			output_enabled = true
+		case "disable_live_output":
+			output_enabled = false
+		case "newblock":
+			fmt.Println("Received new block: ", getCurrentBlockCount())
+			fmt.Println("Tot")
+			num_transactions = 0
+		case "help":
+			fmt.Println("PRINT HELP MENU HERE")
 		case "quit":
 			fmt.Println("Got quit case: ", input)
 			return
-		case "help":
-			fmt.Println("Got case help: ", input)
-		case "trans":
-			updates <- fmt.Sprint(num_transactions)
-		case "reset":
-			num_transactions = 0
-		case "enable":
-			output_enabled = true
-		case "disable":
-			output_enabled = false
 		default:
 			fmt.Println("Got case default: ", input)
 
@@ -85,55 +87,26 @@ func listenForHashtxWorker(socket *zmq4.Socket, num_transactions *int, output_en
 	}
 }
 
-func listenForHashblock(updates chan string) {
+func listenForHashblock(hashblock_updates chan string, hashtx_updates chan string) {
 
-	var socket, context = setupSocket("tcp://127.0.0.1:29002", "hashblock")
+	var socket, context = setupSocket("tcp://127.0.0.1:29003", "hashblock")
 	defer context.Term()
 	defer socket.Close()
 
 	var num_blocks float64 = getCurrentBlockCount()
-	var output_enabled bool = false
 
-	go listenForHashBlockWorker(socket, &num_blocks, &output_enabled)
-
-	for {
-		input := <-updates
-		switch input {
-		case "quit":
-			fmt.Println("Got quit case: ", input)
-			return
-		case "help":
-			fmt.Println("Got case help: ", input)
-		case "trans":
-			updates <- fmt.Sprint(num_blocks)
-		case "reset":
-			num_blocks = 0
-		case "enable":
-			output_enabled = true
-		case "disable":
-			output_enabled = false
-		case "test":
-			fmt.Println("# of current blocks: ", num_blocks)
-		default:
-			fmt.Println("Got case default: ", input)
-
-			// fmt.Println("Default")
-
-		}
-
-	}
-}
-
-func listenForHashBlockWorker(socket *zmq4.Socket, num_blocks *float64, output_enabled *bool) {
+	fmt.Println("listenForHashblock()")
 
 	for {
+		fmt.Println("In hashblock for loop")
 		received, _ := socket.RecvMessage(0)
+		fmt.Println("received block")
 		data := received[1]
-		if *output_enabled {
-			fmt.Println("Received: ", hex.EncodeToString([]byte(data)))
-		}
+		fmt.Println("Received: ", hex.EncodeToString([]byte(data)))
 
-		*num_blocks += 1
+		num_blocks += 1
+
+		hashtx_updates <- "newblock"
 	}
 }
 
@@ -142,7 +115,7 @@ func startZmq() (hashtx chan string, hashblock chan string) {
 	go listenForHashtx(hashtx_updates)
 
 	hashblock_updates := make(chan string)
-	go listenForHashblock(hashblock_updates)
+	go listenForHashblock(hashblock_updates, hashtx_updates)
 
 	return hashtx_updates, hashblock_updates
 }
@@ -155,26 +128,23 @@ func runMainMenu() {
 	fmt.Println("\nPlease select an entry")
 }
 
-func runTxMenu(hash_updates chan string) {
+func runTxMenu(hashtx_updates chan string) {
 
 	for {
 		fmt.Println("(1) # of Txs")
-		fmt.Println("(2) Reset Txs")
-		fmt.Println("(3) Enable live output")
-		fmt.Println("(4) Disable live output")
+		fmt.Println("(2) Enable live output")
+		fmt.Println("(3) Disable live output")
 		fmt.Println("(9) Exit")
 		fmt.Println("\nPlease select an entry")
 		input, _, _ := keyboard.GetSingleKey()
 		switch input {
 		case 49: //1
-			hash_updates <- "trans"
-			fmt.Println("# of Txs is: ", <-hash_updates)
+			hashtx_updates <- "mempool_count"
+			fmt.Println("# of Txs is: ", <-hashtx_updates)
 		case 50: //2
-			hash_updates <- "reset"
+			hashtx_updates <- "enable_live_output"
 		case 51: //3
-			hash_updates <- "enable"
-		case 52: //4
-			hash_updates <- "disable"
+			hashtx_updates <- "disable_live_output"
 		case 57:
 			return
 		default:
@@ -188,7 +158,7 @@ func main() {
 
 	hashtx_updates, hashblock_updates := startZmq()
 
-	fmt.Println("Command result: ", runBtcCliCommandFloat64("getblockcount"))
+	// fmt.Println("Command result: ", runBtcCliCommandFloat64("getblockcount"))
 
 	for {
 		runMainMenu()
