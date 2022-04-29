@@ -37,11 +37,11 @@ func getCurrentBlockCount() (block_count float64) {
 func printBlockInfo(block_info map[string]interface{}) {
 
 	fmt.Println("--------------------------------")
-	fmt.Println("Received new block: ", block_info["height"])
+	fmt.Println("Block Height: ", block_info["height"])
 	fmt.Println("\tHash: ", block_info["hash"])
-	fmt.Println("\tSize: ", block_info["size"])
-	fmt.Println("\tTime: ", block_info["time"])
-	fmt.Println("\tDifficulty: ", block_info["difficulty"])
+	fmt.Printf("\tSize: %F", block_info["size"])
+	fmt.Printf("\tTime: %F", block_info["time"])
+	fmt.Printf("\tDifficulty: %F", block_info["difficulty"])
 	fmt.Println("--------------------------------")
 
 }
@@ -56,7 +56,7 @@ func listenForHashtx(hashtx_updates chan string) {
 	var output_enabled bool = false
 
 	go listenForHashtxWorker(socket, &output_enabled)
-	fmt.Println("In listen for updates")
+
 	for {
 		input := <-hashtx_updates
 		switch input {
@@ -69,13 +69,10 @@ func listenForHashtx(hashtx_updates chan string) {
 		case "help":
 			fmt.Println("PRINT HELP MENU HERE")
 		case "quit":
-			fmt.Println("Got quit case: ", input)
 			return
 		default:
-			fmt.Println("Got case default: ", input)
-
+			fmt.Println("Invalid entry")
 		}
-
 	}
 }
 
@@ -157,6 +154,60 @@ func runTxMenu(hashtx_updates chan string) {
 
 }
 
+var selected_block_height float64 = 0
+
+func runBlockExplorer() {
+	if selected_block_height == 0 {
+		selected_block_height = getCurrentBlockCount()
+	}
+
+	blockchain_info := runBtcCliCommandMap("getblockchaininfo")
+
+	var most_recent_block_hash string = fmt.Sprintf("%v", blockchain_info["bestblockhash"])
+
+	fmt.Println("Best block hash is: ", most_recent_block_hash)
+
+	selected_block_hash := most_recent_block_hash
+
+	for {
+		input, _, _ := keyboard.GetSingleKey()
+
+		result := runBtcCliCommandMap("getblock " + selected_block_hash)
+
+		fmt.Println("block height - ", result["height"])
+
+		switch input {
+		case 49: //1, print selected block's info
+			printBlockInfo(result)
+
+		case 50: //2, go up one block
+			next_block_hash := fmt.Sprintf("%v", result["nextblockhash"])
+
+			if next_block_hash == "0" {
+				fmt.Println("At latest block")
+			} else {
+				selected_block_hash = next_block_hash
+			}
+
+		case 51: //3, go down one block
+			previous_block_hash := fmt.Sprintf("%v", result["previousblockhash"])
+
+			if previous_block_hash == "0" {
+				fmt.Println("At origin block")
+			} else {
+				selected_block_hash = previous_block_hash
+
+			}
+
+		case 57:
+			return
+		default:
+			fmt.Println("Invalid entry")
+		}
+	}
+
+}
+
 func main() {
 
 	hashtx_updates, _ := startZmq()
@@ -166,21 +217,13 @@ func main() {
 	for {
 		runMainMenu()
 		input, _, _ := keyboard.GetSingleKey()
-		fmt.Println("Got keystroke: ", input)
-
-		// printBlockSummary(125, 2184194)
-
-		//live transactions
-		//block explorer +/- 1
 
 		//convert key # to key value
-
 		// command line parser to plug in bitcoin.conf path
-		// update tx count when new block arrives
 
 		switch input {
 		case 49: //1
-			fmt.Println("Current mempool count: ", getCurrentMempoolCount())
+			runBlockExplorer()
 		case 50: //2
 			runTxMenu(hashtx_updates)
 		case 57:
@@ -189,9 +232,6 @@ func main() {
 			fmt.Println("Please select a valid option")
 		}
 	}
-
-	// need to create command line interface
-	// get access to live BTC transactions
 }
 
 func runBtcCliCommandMap(command string) (output map[string]interface{}) {
