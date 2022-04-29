@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -23,16 +22,28 @@ func setupSocket(addr string, notification_type string) (*zmq4.Socket, *zmq4.Con
 	return socket, context
 }
 
-func getCurrentMempoolCount() (count int) {
+func getCurrentMempoolCount() (mempool_count float64) {
 	mempool_info := runBtcCliCommandMap("getmempoolinfo")
 
-	return int((mempool_info["size"]).(float64))
+	return mempool_info["size"].(float64)
 }
 
-func getCurrentBlockCount() (count float64) {
-	// mempool_info := runBtcCliCommandFloat64("getblockcount")
+func getCurrentBlockCount() (block_count float64) {
+	blockchain_info := runBtcCliCommandMap("getblockchaininfo")
 
-	return 1098
+	return blockchain_info["blocks"].(float64)
+}
+
+func printBlockInfo(block_info map[string]interface{}) {
+
+	fmt.Println("--------------------------------")
+	fmt.Println("Received new block: ", block_info["height"])
+	fmt.Println("\tHash: ", block_info["hash"])
+	fmt.Println("\tSize: ", block_info["size"])
+	fmt.Println("\tTime: ", block_info["time"])
+	fmt.Println("\tDifficulty: ", block_info["difficulty"])
+	fmt.Println("--------------------------------")
+
 }
 
 func listenForHashtx(hashtx_updates chan string) {
@@ -41,24 +52,20 @@ func listenForHashtx(hashtx_updates chan string) {
 	defer context.Term()
 	defer socket.Close()
 
-	var num_transactions int = getCurrentMempoolCount()
+	var mempool_count float64 = getCurrentMempoolCount()
 	var output_enabled bool = false
 
-	go listenForHashtxWorker(socket, &num_transactions, &output_enabled)
+	go listenForHashtxWorker(socket, &output_enabled)
 	fmt.Println("In listen for updates")
 	for {
 		input := <-hashtx_updates
 		switch input {
 		case "mempool_count":
-			hashtx_updates <- fmt.Sprint(num_transactions)
+			hashtx_updates <- fmt.Sprint(mempool_count)
 		case "enable_live_output":
 			output_enabled = true
 		case "disable_live_output":
 			output_enabled = false
-		case "newblock":
-			fmt.Println("Received new block: ", getCurrentBlockCount())
-			fmt.Println("Tot")
-			num_transactions = 0
 		case "help":
 			fmt.Println("PRINT HELP MENU HERE")
 		case "quit":
@@ -67,14 +74,12 @@ func listenForHashtx(hashtx_updates chan string) {
 		default:
 			fmt.Println("Got case default: ", input)
 
-			// fmt.Println("Default")
-
 		}
 
 	}
 }
 
-func listenForHashtxWorker(socket *zmq4.Socket, num_transactions *int, output_enabled *bool) {
+func listenForHashtxWorker(socket *zmq4.Socket, output_enabled *bool) {
 
 	for {
 		received, _ := socket.RecvMessage(0)
@@ -82,8 +87,6 @@ func listenForHashtxWorker(socket *zmq4.Socket, num_transactions *int, output_en
 		if *output_enabled {
 			fmt.Println("Received: ", hex.EncodeToString([]byte(data)))
 		}
-
-		*num_transactions += 1
 	}
 }
 
@@ -95,18 +98,18 @@ func listenForHashblock(hashblock_updates chan string, hashtx_updates chan strin
 
 	var num_blocks float64 = getCurrentBlockCount()
 
-	fmt.Println("listenForHashblock()")
-
 	for {
-		fmt.Println("In hashblock for loop")
 		received, _ := socket.RecvMessage(0)
-		fmt.Println("received block")
 		data := received[1]
-		fmt.Println("Received: ", hex.EncodeToString([]byte(data)))
+		var block_hash_received string = hex.EncodeToString([]byte(data))
+		fmt.Println("Received new block: ", block_hash_received)
 
 		num_blocks += 1
 
-		hashtx_updates <- "newblock"
+		result := runBtcCliCommandMap("getblock " + block_hash_received)
+
+		printBlockInfo(result)
+
 	}
 }
 
@@ -121,9 +124,8 @@ func startZmq() (hashtx chan string, hashblock chan string) {
 }
 
 func runMainMenu() {
-	fmt.Println("(1) Current mempool count")
-	fmt.Println("(2) Do second thing")
-	fmt.Println("(3) Tx Menu")
+	fmt.Println("(1) Block Explorer")
+	fmt.Println("(2) Live Network Summary")
 	fmt.Println("(9) Exit")
 	fmt.Println("\nPlease select an entry")
 }
@@ -131,9 +133,10 @@ func runMainMenu() {
 func runTxMenu(hashtx_updates chan string) {
 
 	for {
-		fmt.Println("(1) # of Txs")
-		fmt.Println("(2) Enable live output")
-		fmt.Println("(3) Disable live output")
+		fmt.Println("A per-block summary will appear as the network updates")
+		fmt.Println("(1) Current mempool count")
+		fmt.Println("(2) Enable live transactions")
+		fmt.Println("(3) Disable live transactions")
 		fmt.Println("(9) Exit")
 		fmt.Println("\nPlease select an entry")
 		input, _, _ := keyboard.GetSingleKey()
@@ -156,14 +159,19 @@ func runTxMenu(hashtx_updates chan string) {
 
 func main() {
 
-	hashtx_updates, hashblock_updates := startZmq()
+	hashtx_updates, _ := startZmq()
 
-	// fmt.Println("Command result: ", runBtcCliCommandFloat64("getblockcount"))
+	fmt.Println("Command result: ", getCurrentBlockCount())
 
 	for {
 		runMainMenu()
 		input, _, _ := keyboard.GetSingleKey()
 		fmt.Println("Got keystroke: ", input)
+
+		// printBlockSummary(125, 2184194)
+
+		//live transactions
+		//block explorer +/- 1
 
 		//convert key # to key value
 
@@ -174,15 +182,7 @@ func main() {
 		case 49: //1
 			fmt.Println("Current mempool count: ", getCurrentMempoolCount())
 		case 50: //2
-			hashblock_updates <- "test"
-		case 51: //3
 			runTxMenu(hashtx_updates)
-		case 52: //4
-			hashtx_updates <- "reset"
-		case 53: //5
-			hashtx_updates <- "enable"
-		case 54: //6
-			hashtx_updates <- "disable"
 		case 57:
 			return
 		default:
@@ -214,39 +214,4 @@ func runBtcCliCommandMap(command string) (output map[string]interface{}) {
 
 	return result
 
-}
-
-func runBtcCliCommandFloat64(command string) (output float64) {
-	var command_to_run = bitcoin_conf_path + " " + command
-
-	cmd := exec.Command("bash", "-c", command_to_run)
-
-	var byte_buffer bytes.Buffer
-	// var result float64
-
-	cmd.Stdout = &byte_buffer
-
-	_ = cmd.Run()
-
-	fmt.Println("Bytes out: ", byte_buffer)
-
-	result, _ := byte_buffer.ReadBytes(0)
-
-	test := bytes.NewReader(result)
-
-	var test_result_BE float64
-	var test_result_LE float64
-
-	binary.Read(test, binary.BigEndian, test_result_BE)
-	binary.Read(test, binary.LittleEndian, test_result_LE)
-
-	fmt.Println("Result in string: ", hex.EncodeToString(result))
-	fmt.Println("Result output BE: ", &test_result_BE)
-	fmt.Println("Result output LE: ", &test_result_LE)
-
-	// hex.Decode()
-
-	floatresult := float64(result[6])
-
-	return floatresult
 }
