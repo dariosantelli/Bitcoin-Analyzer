@@ -165,16 +165,15 @@ func runBlockExplorer() {
 
 	var most_recent_block_hash string = fmt.Sprintf("%v", blockchain_info["bestblockhash"])
 
-	fmt.Println("Best block hash is: ", most_recent_block_hash)
-
 	selected_block_hash := most_recent_block_hash
+
+	selected_block_height := runBtcCliCommandMap("getblock " + selected_block_hash)["height"].(float64)
 
 	for {
 		input, _, _ := keyboard.GetSingleKey()
 
+		// Get block info for selected block
 		result := runBtcCliCommandMap("getblock " + selected_block_hash)
-
-		fmt.Println("block height - ", result["height"])
 
 		switch input {
 		case 49: //1, print selected block's info
@@ -183,20 +182,25 @@ func runBlockExplorer() {
 		case 50: //2, go up one block
 			next_block_hash := fmt.Sprintf("%v", result["nextblockhash"])
 
-			if next_block_hash == "0" {
-				fmt.Println("At latest block")
+			// If at top of chain, there won't be a next block
+			if next_block_hash == "<nil>" {
+				fmt.Println("At latest block - ", selected_block_height)
 			} else {
 				selected_block_hash = next_block_hash
+				selected_block_height += 1
+				fmt.Println("Selected block height - ", selected_block_height)
 			}
 
 		case 51: //3, go down one block
 			previous_block_hash := fmt.Sprintf("%v", result["previousblockhash"])
 
+			// If at beginning of chain, there won't be a previous block
 			if previous_block_hash == "0" {
-				fmt.Println("At origin block")
+				fmt.Println("At origin block - 0")
 			} else {
 				selected_block_hash = previous_block_hash
-
+				selected_block_height -= 1
+				fmt.Println("Selected block height - ", selected_block_height)
 			}
 
 		case 57:
