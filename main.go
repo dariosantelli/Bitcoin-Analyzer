@@ -209,7 +209,7 @@ func runBlockExplorer() {
 
 		case 51: //3, go down one block
 			// If at beginning of chain, there won't be a previous block
-			if selected_block_height > 1 {
+			if selected_block_height > 0 {
 				previous_block_hash := fmt.Sprintf("%v", runBtcCliCommand("getblockhash "+fmt.Sprint(selected_block_height-1)))
 				selected_block_hash = previous_block_hash
 				selected_block_height -= 1
@@ -219,7 +219,25 @@ func runBlockExplorer() {
 				fmt.Println("At origin block - 0")
 			}
 
-		// case 53: //5, enter
+		case 53: //5, enter block number to jump to
+
+			var name int64
+
+			for {
+				fmt.Print("Enter a block number: ")
+				fmt.Scanf("%d", &name)
+				fmt.Println("Entered: ", name)
+
+				if name == 0 {
+					fmt.Println("Invalid block number entered, please try again")
+				}
+
+				if name >= 0 && name <= getCurrentBlockCount() {
+					selected_block_height = name
+					selected_block_hash = fmt.Sprintf("%v", runBtcCliCommand("getblockhash "+fmt.Sprint(selected_block_height)))
+					break
+				}
+			}
 
 		case 57:
 			return
@@ -283,7 +301,7 @@ func runBtcCliCommand(command string) (output string) {
 	out, err := exec.Command("bash", "-c", command_to_run).Output()
 
 	if err != nil {
-		fmt.Println("error: ", err)
+		fmt.Println("runBtcCliCommand() command error: ", err)
 	}
 
 	return string(out)
