@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/eiannone/keyboard"
 	zmq4 "github.com/pebbe/zmq4"
@@ -28,10 +31,16 @@ func getCurrentMempoolCount() (mempool_count float64) {
 	return mempool_info["size"].(float64)
 }
 
-func getCurrentBlockCount() (block_count float64) {
-	blockchain_info := runBtcCliCommandMap("getblockchaininfo")
+func getCurrentBlockCount() (block_count int64) {
+	top_of_chain_height := runBtcCliCommand("getblockcount")
+	top_of_chain_height = strings.TrimSuffix(top_of_chain_height, "\n")
+	top_of_chain_height_int, err := strconv.ParseInt(top_of_chain_height, 10, 64)
 
-	return blockchain_info["blocks"].(float64)
+	if err != nil {
+		fmt.Println("getCurrentBlockCount() strconv error: ", err)
+	}
+
+	return top_of_chain_height_int
 }
 
 func printBlockInfo(block_info map[string]interface{}) {
@@ -40,8 +49,16 @@ func printBlockInfo(block_info map[string]interface{}) {
 	fmt.Println("Block Height: ", block_info["height"])
 	fmt.Println("\tHash: ", block_info["hash"])
 	fmt.Printf("\tSize: %F", block_info["size"])
-	fmt.Printf("\tTime: %F", block_info["time"])
+	fmt.Println()
+
+	var block_time_in_unix int64 = int64(block_info["time"].(float64))
+	block_time := time.Unix(block_time_in_unix, 0)
+	location, _ := time.LoadLocation("America/New_York")
+
+	fmt.Println("\tTime: ", block_time.In(location).Format(time.RFC1123))
 	fmt.Printf("\tDifficulty: %F", block_info["difficulty"])
+	fmt.Println()
+
 	fmt.Println("--------------------------------")
 
 }
@@ -93,7 +110,7 @@ func listenForHashblock(hashblock_updates chan string, hashtx_updates chan strin
 	defer context.Term()
 	defer socket.Close()
 
-	var num_blocks float64 = getCurrentBlockCount()
+	var num_blocks int64 = getCurrentBlockCount()
 
 	for {
 		received, _ := socket.RecvMessage(0)
@@ -154,7 +171,7 @@ func runTxMenu(hashtx_updates chan string) {
 
 }
 
-var selected_block_height float64 = 0
+var selected_block_height int64 = 0
 
 func runBlockExplorer() {
 	if selected_block_height == 0 {
@@ -167,41 +184,42 @@ func runBlockExplorer() {
 
 	selected_block_hash := most_recent_block_hash
 
-	selected_block_height := runBtcCliCommandMap("getblock " + selected_block_hash)["height"].(float64)
+	selected_block_height := int64(runBtcCliCommandMap("getblock " + selected_block_hash)["height"].(float64))
 
 	for {
 		input, _, _ := keyboard.GetSingleKey()
 
-		// Get block info for selected block
-		result := runBtcCliCommandMap("getblock " + selected_block_hash)
-
 		switch input {
 		case 49: //1, print selected block's info
+			result := runBtcCliCommandMap("getblock " + selected_block_hash)
 			printBlockInfo(result)
 
 		case 50: //2, go up one block
-			next_block_hash := fmt.Sprintf("%v", result["nextblockhash"])
+			current_block_height := getCurrentBlockCount()
 
-			// If at top of chain, there won't be a next block
-			if next_block_hash == "<nil>" {
-				fmt.Println("At latest block - ", selected_block_height)
-			} else {
+			// If not at top of chain
+			if selected_block_height != current_block_height {
+				next_block_hash := fmt.Sprintf("%v", runBtcCliCommand("getblockhash "+fmt.Sprint(selected_block_height+1)))
 				selected_block_hash = next_block_hash
 				selected_block_height += 1
 				fmt.Println("Selected block height - ", selected_block_height)
+			} else {
+				fmt.Println("At latest block - ", selected_block_height)
 			}
 
 		case 51: //3, go down one block
-			previous_block_hash := fmt.Sprintf("%v", result["previousblockhash"])
-
 			// If at beginning of chain, there won't be a previous block
-			if previous_block_hash == "0" {
-				fmt.Println("At origin block - 0")
-			} else {
+			if selected_block_height > 1 {
+				previous_block_hash := fmt.Sprintf("%v", runBtcCliCommand("getblockhash "+fmt.Sprint(selected_block_height-1)))
 				selected_block_hash = previous_block_hash
 				selected_block_height -= 1
+
 				fmt.Println("Selected block height - ", selected_block_height)
+			} else {
+				fmt.Println("At origin block - 0")
 			}
+
+		// case 53: //5, enter
 
 		case 57:
 			return
@@ -215,8 +233,6 @@ func runBlockExplorer() {
 func main() {
 
 	hashtx_updates, _ := startZmq()
-
-	fmt.Println("Command result: ", getCurrentBlockCount())
 
 	for {
 		runMainMenu()
@@ -258,4 +274,17 @@ func runBtcCliCommandMap(command string) (output map[string]interface{}) {
 
 	return result
 
+}
+
+func runBtcCliCommand(command string) (output string) {
+
+	var command_to_run = bitcoin_conf_path + " " + command
+
+	out, err := exec.Command("bash", "-c", command_to_run).Output()
+
+	if err != nil {
+		fmt.Println("error: ", err)
+	}
+
+	return string(out)
 }
